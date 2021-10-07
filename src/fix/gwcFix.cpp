@@ -285,7 +285,7 @@ gwcFix::error (const string& err)
     reconnect = mSessionsCbs->onError (err);
     if (reconnect)
     {
-        mLog->info ("reconnecting in 5 secsonds...");
+        mLog->info ("reconnecting in 5 seconds...");
         mReconnectTimer = sbfTimer_create (sbfMw_getDefaultThread (mMw),
                                            mQueue,
                                            gwcFix::onReconnect,
