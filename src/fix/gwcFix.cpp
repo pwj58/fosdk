@@ -1106,7 +1106,7 @@ gwcFix::sendMsg (cdr& msg)
 
     if (mCodec.encode (msg, space, sizeof space, used) != GW_CODEC_SUCCESS)
     {
-        mLog->err ("failed to construct logon message [%s]",
+        mLog->err ("failed to construct message [%s]",
                    mCodec.getLastError ().c_str ());
 
         unlock ();
