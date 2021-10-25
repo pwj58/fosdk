@@ -131,6 +131,7 @@ private:
     void handleOrderCancelRejectMsg (int64_t seqno, cdr& msg); 
     void handleBusinessRejectMsg (int64_t seqno, cdr& msg);
     void handleRejectMsg (int64_t seqno, cdr& msg);
+    void handleNextExpectedSeqNum( int64_t seqno, cdr& msg);
 
     static void* dispatchCb (void* closure);
     static sbfError cacheFileItemCb (sbfCacheFile file, 

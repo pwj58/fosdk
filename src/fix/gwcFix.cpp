@@ -322,7 +322,12 @@ gwcFix::setHeader (cdr& d)
     d.setString (BeginString, mBeginString);
     d.setString (SenderCompID, mSenderCompID);
     d.setString (TargetCompID, mTargetCompID);
-    d.setInteger (MsgSeqNum, mSeqnums.mOutbound);
+    
+    int64_t seqnum;
+    if ( !d.getInteger (MsgSeqNum, seqnum) )
+    {
+         d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
+    }
 
     cdrDateTime dt;
     getTime (dt);
@@ -382,6 +387,12 @@ gwcFix::handleTcpMsg (cdr& msg)
                 unlock ();
             }
 
+            int64_t nextExpectedSeqNum;
+            if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
+            {
+                handleNextExpectedSeqNum (seqnum, msg);
+            }
+
             mFirstConnect = false;
             mSessionsCbs->onLoggedOn (seqnum, msg);
             loggedOnEvent ();         
@@ -415,6 +426,7 @@ gwcFix::handleTcpMsg (cdr& msg)
         unlock ();
 
         sendMsg (resend);
+
         return;
     }
     else if (seqnum < mSeqnums.mInbound)
@@ -457,6 +469,25 @@ gwcFix::handleTcpMsg (cdr& msg)
         mMessageCbs->onAdmin (seqnum, msg);
     else
         mMessageCbs->onMsg (seqnum, msg);
+}
+
+void gwcFix::handleNextExpectedSeqNum( int64_t seqno, cdr& msg)
+{
+    mLog->debug ("processing handle nextExpectedSeqNum: %ld", seqno);
+
+    int64_t nextExpectedSeqNum;
+    if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
+    {
+        if ( nextExpectedSeqNum < mSeqnums.mOutbound )
+        {
+            cdr resendRequest;
+            resendRequest.setString  (MsgType, FixSequenceReset);
+            resendRequest.setInteger (MsgSeqNum, mSeqnums.mOutbound - 1);
+            resendRequest.setInteger (NewSeqNo, mSeqnums.mOutbound + 1);
+            resendRequest.setString  (GapFillFlag, "Y");
+            sendMsg (resendRequest);
+        }
+    }
 }
 
 void
