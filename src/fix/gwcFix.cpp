@@ -413,37 +413,52 @@ gwcFix::handleTcpMsg (cdr& msg)
 
     lock ();
 
-    if (seqnum > mSeqnums.mInbound)
+    string possDupFlagStr;
+    bool possDupFlag = false;
+    if (msg.getString (PossDupFlag, possDupFlagStr))
     {
-        mLog->warn ("gap detected, got %ld expected: %ld",
-                    seqnum, mSeqnums.mInbound);
+        mLog->info ("poss dupe flag, %s ", possDupFlagStr.c_str() );
 
-        cdr resend;
-        resend.setString (MsgType, FixResendRequest);
-        resend.setInteger (BeginSeqNo, mSeqnums.mInbound);
-        resend.setInteger (EndSeqNo, 0);
-
-        unlock ();
-
-        sendMsg (resend);
-
-        return;
-    }
-    else if (seqnum < mSeqnums.mInbound)
-    {
-        stringstream err;
-        err << "sequence number too low expecting: " << mSeqnums.mInbound;
-        error (err.str ());
-
-        unlock ();
-
-        return;
+        if (!utils_parseBool (possDupFlagStr, possDupFlag))
+        {
+            mLog->err ("failed to parse poss resend flag as bool");
+        }
     }
 
-    mSeqnums.mInbound = seqnum + 1;
+    if ( !possDupFlag )
+    {
+        if (seqnum > mSeqnums.mInbound)
+        {
+            mLog->warn ("gap detected, got %ld expected: %ld",
+                        seqnum, mSeqnums.mInbound);
 
-    sbfCacheFile_write (mCacheItem, &mSeqnums);
-    sbfCacheFile_flush (mCacheFile);
+            cdr resend;
+            resend.setString (MsgType, FixResendRequest);
+            resend.setInteger (BeginSeqNo, mSeqnums.mInbound);
+            resend.setInteger (EndSeqNo, 0);
+
+            unlock ();
+
+            sendMsg (resend);
+
+            return;
+        }
+        else if (seqnum < mSeqnums.mInbound)
+        {
+            stringstream err;
+            err << "sequence number too low expecting: " << mSeqnums.mInbound;
+            error (err.str ());
+
+            unlock ();
+
+            return;
+        }
+
+        mSeqnums.mInbound = seqnum + 1;
+
+        sbfCacheFile_write (mCacheItem, &mSeqnums);
+        sbfCacheFile_flush (mCacheFile);
+    }
 
     unlock ();
 
@@ -473,13 +488,17 @@ gwcFix::handleTcpMsg (cdr& msg)
 
 void gwcFix::handleNextExpectedSeqNum( int64_t seqno, cdr& msg)
 {
-    mLog->debug ("processing handle nextExpectedSeqNum: %ld", seqno);
+    mLog->debug ("processing handle nextExpectedSeqNum 34=: %ld", seqno);
 
     int64_t nextExpectedSeqNum;
     if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
     {
+        mLog->debug ("processing handle nextExpectedSeqNum 789=: %ld", nextExpectedSeqNum );
+
         if ( nextExpectedSeqNum < mSeqnums.mOutbound )
         {
+            mLog->debug ("Sending gap fill in response to next expected seq no" );
+
             cdr resendRequest;
             resendRequest.setString  (MsgType, FixSequenceReset);
             resendRequest.setInteger (MsgSeqNum, mSeqnums.mOutbound - 1);
