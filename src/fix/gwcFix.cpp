@@ -875,6 +875,7 @@ gwcFix::start (bool reset)
         // set ResetSeqNumFlag true if reset has been passed
         // at call to start
         mResetSeqNumFlag = true;
+        mFirstConnect = true;
 
         mSeqnums.mInbound = 1;
         mSeqnums.mOutbound = 1;
