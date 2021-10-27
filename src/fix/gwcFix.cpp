@@ -358,6 +358,8 @@ gwcFix::handleTcpMsg (cdr& msg)
 
         if (msgType == FixLogon)
         {
+            mResetSeqNumFlag = false;
+
             mState = GWC_CONNECTOR_READY;
             mHb = sbfTimer_create (sbfMw_getDefaultThread (mMw),
                                    mQueue,
