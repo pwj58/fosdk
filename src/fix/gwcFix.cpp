@@ -865,11 +865,15 @@ gwcFix::init (gwcSessionCallbacks* sessionCbs,
 bool 
 gwcFix::start (bool reset)
 {
+    mLog->debug ("gwcFIX::start start called");
+
     if (mTcpConnection != NULL)
         delete mTcpConnection;
 
     if (reset || mResetSeqNumFlag)
     {
+        mLog->debug ("gwcFIX::start resetting sequence numbers");
+
         lock ();
 
         // set ResetSeqNumFlag true if reset has been passed
@@ -886,6 +890,8 @@ gwcFix::start (bool reset)
         unlock ();
     }
 
+    mLog->debug ("gwcFIX::start creating new tcp connection");
+
     mTcpConnection = new SbfTcpConnection (mSbfLog,
                                            sbfMw_getDefaultThread (mMw),
                                            mQueue,
@@ -898,6 +904,8 @@ gwcFix::start (bool reset)
         mLog->err ("failed to create connection to gateway response server");
         return false;
     }
+
+    mLog->debug ("gwcFIX::start created new tcp connection");
 
     return true;
 }
