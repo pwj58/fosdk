@@ -500,7 +500,7 @@ void gwcFix::handleNextExpectedSeqNum( int64_t seqno, cdr& msg)
         mLog->debug ("processing handle nextExpectedSeqNum 789=: %ld", nextExpectedSeqNum );
         mLog->debug ("processing handle nextExpectedSeqNum our outbound=: %ld", mSeqnums.mOutbound );
 
-        if ( nextExpectedSeqNum < mSeqnums.mOutbound )
+        if ( nextExpectedSeqNum > mSeqnums.mOutbound )
         {
             mLog->debug ("Sending gap fill in response to next expected seq no" );
 
