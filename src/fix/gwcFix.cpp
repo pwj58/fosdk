@@ -496,7 +496,7 @@ void gwcFix::handleNextExpectedSeqNum(int64_t seqno, cdr &msg)
             resendRequest.setString(MsgType, FixSequenceReset);
             resendRequest.setInteger(MsgSeqNum, nextExpectedSeqNum );
             resendRequest.setInteger(NewSeqNo, mSeqnums.mOutbound + 1);
-            resendRequest.setString(GapFillFlag, "Y");
+            resendRequest.setString(GapFillFlag, "N");
             sendMsg(resendRequest);
         }
         else if (nextExpectedSeqNum > mSeqnums.mOutbound) 
