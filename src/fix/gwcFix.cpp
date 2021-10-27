@@ -323,11 +323,13 @@ gwcFix::setHeader (cdr& d)
     d.setString (SenderCompID, mSenderCompID);
     d.setString (TargetCompID, mTargetCompID);
     
-    int64_t seqnum;
+    /*int64_t seqnum;
     if ( !d.getInteger (MsgSeqNum, seqnum) )
     {
          d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
-    }
+    }*/
+
+    d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
 
     cdrDateTime dt;
     getTime (dt);
@@ -390,7 +392,7 @@ gwcFix::handleTcpMsg (cdr& msg)
             int64_t nextExpectedSeqNum;
             if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
             {
-                handleNextExpectedSeqNum (seqnum, msg);
+                handleNextExpectedSeqNum(seqnum, msg);
             }
 
             mFirstConnect = false;
@@ -494,6 +496,7 @@ void gwcFix::handleNextExpectedSeqNum( int64_t seqno, cdr& msg)
     if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
     {
         mLog->debug ("processing handle nextExpectedSeqNum 789=: %ld", nextExpectedSeqNum );
+        mLog->debug ("processing handle nextExpectedSeqNum our outbound=: %ld", mSeqnums.mOutbound );
 
         if ( nextExpectedSeqNum < mSeqnums.mOutbound )
         {
