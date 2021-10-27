@@ -312,13 +312,13 @@ void gwcFix::setHeader(cdr &d)
     d.setString(SenderCompID, mSenderCompID);
     d.setString(TargetCompID, mTargetCompID);
 
-    /*int64_t seqnum;
+    int64_t seqnum;
     if ( !d.getInteger (MsgSeqNum, seqnum) )
     {
          d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
-    }*/
+    }
 
-    d.setInteger(MsgSeqNum, mSeqnums.mOutbound);
+    //d.setInteger(MsgSeqNum, mSeqnums.mOutbound);
 
     cdrDateTime dt;
     getTime(dt);
@@ -494,7 +494,7 @@ void gwcFix::handleNextExpectedSeqNum(int64_t seqno, cdr &msg)
 
             cdr resendRequest;
             resendRequest.setString(MsgType, FixSequenceReset);
-            resendRequest.setInteger(MsgSeqNum, mSeqnums.mOutbound - 1);
+            resendRequest.setInteger(MsgSeqNum, nextExpectedSeqNum );
             resendRequest.setInteger(NewSeqNo, mSeqnums.mOutbound + 1);
             resendRequest.setString(GapFillFlag, "Y");
             sendMsg(resendRequest);
