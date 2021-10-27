@@ -19,59 +19,56 @@ const string gwcFix::FixOrderCancelRequest = "F";
 const string gwcFix::FixOrderCancelReplaceRequest = "G";
 const string gwcFix::FixBusinessMessageReject = "j";
 
-gwcFixTcpConnectionDelegate::gwcFixTcpConnectionDelegate (gwcFix* gwc)
-    : SbfTcpConnectionDelegate (),
-      mGwc (gwc)
-{ 
+gwcFixTcpConnectionDelegate::gwcFixTcpConnectionDelegate(gwcFix *gwc)
+    : SbfTcpConnectionDelegate(),
+      mGwc(gwc)
+{
 }
 
-void
-gwcFixTcpConnectionDelegate::onReady ()
+void gwcFixTcpConnectionDelegate::onReady()
 {
-    mGwc->onTcpConnectionReady ();
+    mGwc->onTcpConnectionReady();
 }
 
-void
-gwcFixTcpConnectionDelegate::onError ()
+void gwcFixTcpConnectionDelegate::onError()
 {
-    mGwc->onTcpConnectionError ();
+    mGwc->onTcpConnectionError();
 }
 
 size_t
-gwcFixTcpConnectionDelegate::onRead (void* data, size_t size)
+gwcFixTcpConnectionDelegate::onRead(void *data, size_t size)
 {
-    return mGwc->onTcpConnectionRead (data, size);
+    return mGwc->onTcpConnectionRead(data, size);
 }
 
-extern "C" gwcConnector*
-getConnector (neueda::logger* log, const neueda::properties& props)
+extern "C" gwcConnector *
+getConnector(neueda::logger *log, const neueda::properties &props)
 {
-    return new gwcFix (log);
+    return new gwcFix(log);
 }
 
-gwcFix::gwcFix (neueda::logger* log) :
-    gwcConnector (log),
-    mTcpConnection (NULL),
-    mTcpConnectionDelegate (this),
-    mCacheFile (NULL),
-    mCacheItem (NULL),        
-    mMw (NULL),
-    mQueue (NULL),
-    mBeginString ("FIX.4.2"),
-    mSenderCompID (""),
-    mTargetCompID (""),
-    mDataDictionary (""),
-    mHeartBtInt (30),
-    mResetSeqNumFlag (false),
-    mResetOnLogon (false),
-    mFirstConnect (true),
-    mDispatching (false),
-    mHb (NULL),
-    mReconnectTimer (NULL),
-    mSeenHb (false),
-    mMissedHb (0),
-    mEncryptMethod (0),
-    mSetNextExpSeqNum (false)
+gwcFix::gwcFix(neueda::logger *log) : gwcConnector(log),
+                                      mTcpConnection(NULL),
+                                      mTcpConnectionDelegate(this),
+                                      mCacheFile(NULL),
+                                      mCacheItem(NULL),
+                                      mMw(NULL),
+                                      mQueue(NULL),
+                                      mBeginString("FIX.4.2"),
+                                      mSenderCompID(""),
+                                      mTargetCompID(""),
+                                      mDataDictionary(""),
+                                      mHeartBtInt(30),
+                                      mResetSeqNumFlag(false),
+                                      mResetOnLogon(false),
+                                      mFirstConnect(true),
+                                      mDispatching(false),
+                                      mHb(NULL),
+                                      mReconnectTimer(NULL),
+                                      mSeenHb(false),
+                                      mMissedHb(0),
+                                      mEncryptMethod(0),
+                                      mSetNextExpSeqNum(false)
 {
     mSeqnums.mInbound = 1;
     mSeqnums.mOutbound = 1;
@@ -80,50 +77,49 @@ gwcFix::gwcFix (neueda::logger* log) :
     mMsgOutWriter = NULL;
 }
 
-gwcFix::~gwcFix ()
+gwcFix::~gwcFix()
 {
     if (mReconnectTimer)
-        sbfTimer_destroy (mReconnectTimer);
+        sbfTimer_destroy(mReconnectTimer);
     if (mHb)
-        sbfTimer_destroy (mHb);
+        sbfTimer_destroy(mHb);
     if (mTcpConnection)
         delete mTcpConnection;
     if (mCacheFile)
-        sbfCacheFile_close (mCacheFile);
+        sbfCacheFile_close(mCacheFile);
     if (mQueue)
-        sbfQueue_destroy (mQueue);
+        sbfQueue_destroy(mQueue);
     if (mDispatching)
-        sbfThread_join (mThread);
+        sbfThread_join(mThread);
     if (mMw)
-        sbfMw_destroy (mMw);
+        sbfMw_destroy(mMw);
     if (mMsgInWriter)
-        mMsgInWriter->teardown ();
+        mMsgInWriter->teardown();
     if (mMsgOutWriter)
-        mMsgOutWriter->teardown ();
+        mMsgOutWriter->teardown();
 }
 
 sbfError
-gwcFix::cacheFileItemCb (sbfCacheFile file,
-                           sbfCacheFileItem item,
-                           void* itemData,
-                           size_t itemSize,
-                           void* closure)
+gwcFix::cacheFileItemCb(sbfCacheFile file,
+                        sbfCacheFileItem item,
+                        void *itemData,
+                        size_t itemSize,
+                        void *closure)
 {
-    gwcFix* gwc = reinterpret_cast<gwcFix*>(closure);
+    gwcFix *gwc = reinterpret_cast<gwcFix *>(closure);
 
-    if (itemSize != sizeof (gwcFixSeqnums))
+    if (itemSize != sizeof(gwcFixSeqnums))
     {
-        gwc->mLog->err ("mismatch of sizes in seqno cache file");
+        gwc->mLog->err("mismatch of sizes in seqno cache file");
         return EINVAL;
     }
 
     gwc->mCacheItem = item;
-    memcpy (&gwc->mSeqnums, itemData, itemSize);
+    memcpy(&gwc->mSeqnums, itemData, itemSize);
     return 0;
 }
 
-void 
-gwcFix::onTcpConnectionReady ()
+void gwcFix::onTcpConnectionReady()
 {
     mState = GWC_CONNECTOR_CONNECTED;
 
@@ -131,97 +127,95 @@ gwcFix::onTcpConnectionReady ()
     size_t used = 0;
 
     cdr d;
-    d.setString (MsgType, FixLogon);
+    d.setString(MsgType, FixLogon);
 
     if ((mFirstConnect && mResetSeqNumFlag) || mResetOnLogon)
-        d.setString (ResetSeqNumFlag, "Y");
+        d.setString(ResetSeqNumFlag, "Y");
     else
-        d.setString (ResetSeqNumFlag, "N");
+        d.setString(ResetSeqNumFlag, "N");
 
     if (mSetNextExpSeqNum)
-        d.setInteger (NextExpectedMsgSeqNum, mSeqnums.mInbound);
+        d.setInteger(NextExpectedMsgSeqNum, mSeqnums.mInbound);
 
-    d.setInteger (EncryptMethod, mEncryptMethod);
-    d.setInteger (HeartBtInt, mHeartBtInt);
-    setHeader (d);
+    d.setInteger(EncryptMethod, mEncryptMethod);
+    d.setInteger(HeartBtInt, mHeartBtInt);
+    setHeader(d);
 
-    mSessionsCbs->onLoggingOn (d);
+    mSessionsCbs->onLoggingOn(d);
 
-    if (mCodec.encode (d, space, sizeof space, used) != GW_CODEC_SUCCESS)
+    if (mCodec.encode(d, space, sizeof space, used) != GW_CODEC_SUCCESS)
     {
-        mLog->err ("failed to construct logon message [%s]",
-                   mCodec.getLastError ().c_str ());
+        mLog->err("failed to construct logon message [%s]",
+                  mCodec.getLastError().c_str());
         return;
     }
 
-    mLog->debug ("msg out..");
-    mLog->debug ("%s", d.toString ().c_str ());
+    mLog->debug("msg out..");
+    mLog->debug("%s", d.toString().c_str());
 
-    mTcpConnection->send (space, used);
+    mTcpConnection->send(space, used);
 
     if (mMsgInWriter)
-        mMsgInWriter->write (space, used);
+        mMsgInWriter->write(space, used);
 
-    lock ();
+    lock();
 
     mSeqnums.mOutbound++;
-    sbfCacheFile_write (mCacheItem, &mSeqnums);
-    sbfCacheFile_flush (mCacheFile);
+    sbfCacheFile_write(mCacheItem, &mSeqnums);
+    sbfCacheFile_flush(mCacheFile);
 
-    unlock ();
+    unlock();
 }
 
-void 
-gwcFix::onTcpConnectionError ()
+void gwcFix::onTcpConnectionError()
 {
-    error ("tcp dropped connection");
+    error("tcp dropped connection");
 }
 
-size_t 
-gwcFix::onTcpConnectionRead (void* data, size_t size)
+size_t
+gwcFix::onTcpConnectionRead(void *data, size_t size)
 {
     size_t left = size;
-    cdr    msg;
+    cdr msg;
 
     while (left > 0)
     {
         size_t used = 0;
-        switch (mCodec.decode (msg, data, left, used))
+        switch (mCodec.decode(msg, data, left, used))
         {
         case GW_CODEC_ERROR:
-            mLog->err ("failed to decode message codec error");
+            mLog->err("failed to decode message codec error");
             return size - left;
 
         case GW_CODEC_SHORT:
             return size - left;
 
         case GW_CODEC_ABORT:
-            mLog->err ("failed to decode message");
+            mLog->err("failed to decode message");
             return size;
 
         case GW_CODEC_SUCCESS:
             if (mMsgInWriter)
-                mMsgInWriter->write (data, used);
-            handleTcpMsg (msg);
+                mMsgInWriter->write(data, used);
+            handleTcpMsg(msg);
             left -= used;
             break;
         }
-        data = (char*)data + used; 
-        msg.clear ();
+        data = (char *)data + used;
+        msg.clear();
     }
 
     return size - left;
 }
 
-void 
-gwcFix::onHbTimeout (sbfTimer timer, void* closure)
+void gwcFix::onHbTimeout(sbfTimer timer, void *closure)
 {
-    gwcFix* gwc = reinterpret_cast<gwcFix*>(closure);
+    gwcFix *gwc = reinterpret_cast<gwcFix *>(closure);
 
     cdr hb;
-    hb.setString (MsgType, FixHeartbeat);
+    hb.setString(MsgType, FixHeartbeat);
 
-    gwc->sendMsg (hb);
+    gwc->sendMsg(hb);
     if (gwc->mSeenHb)
     {
         gwc->mSeenHb = false;
@@ -231,78 +225,74 @@ gwcFix::onHbTimeout (sbfTimer timer, void* closure)
 
     gwc->mMissedHb++;
     if (gwc->mMissedHb > 3)
-        gwc->error ("missed heartbeats");
+        gwc->error("missed heartbeats");
 }
 
-void 
-gwcFix::onReconnect (sbfTimer timer, void* closure)
+void gwcFix::onReconnect(sbfTimer timer, void *closure)
 {
-    gwcFix* gwc = reinterpret_cast<gwcFix*>(closure);
+    gwcFix *gwc = reinterpret_cast<gwcFix *>(closure);
 
-    gwc->start (false);
+    gwc->start(false);
 }
 
-void* 
-gwcFix::dispatchCb (void* closure)
+void *
+gwcFix::dispatchCb(void *closure)
 {
-    gwcFix* gwc = reinterpret_cast<gwcFix*>(closure);
-    sbfQueue_dispatch (gwc->mQueue);
+    gwcFix *gwc = reinterpret_cast<gwcFix *>(closure);
+    sbfQueue_dispatch(gwc->mQueue);
     return NULL;
 }
 
-void
-gwcFix::reset ()
+void gwcFix::reset()
 {
-    lock ();
-    
+    lock();
+
     if (mTcpConnection)
         delete mTcpConnection;
     mTcpConnection = NULL;
 
     if (mHb)
-        sbfTimer_destroy (mHb);
+        sbfTimer_destroy(mHb);
     mHb = NULL;
     mSeenHb = false;
     mMissedHb = 0;
-    
+
     if (mReconnectTimer)
-        sbfTimer_destroy (mReconnectTimer);
+        sbfTimer_destroy(mReconnectTimer);
     mReconnectTimer = NULL;
 
-    gwcConnector::reset ();
+    gwcConnector::reset();
 
-    unlock ();
+    unlock();
 }
 
-void 
-gwcFix::error (const string& err)
+void gwcFix::error(const string &err)
 {
     bool reconnect;
 
-    mLog->err ("%s", err.c_str());
-    reset ();
+    mLog->err("%s", err.c_str());
+    reset();
 
-    reconnect = mSessionsCbs->onError (err);
+    reconnect = mSessionsCbs->onError(err);
     if (reconnect)
     {
-        mLog->info ("reconnecting in 5 seconds...");
-        mReconnectTimer = sbfTimer_create (sbfMw_getDefaultThread (mMw),
-                                           mQueue,
-                                           gwcFix::onReconnect,
-                                           this,
-                                           5.0); 
+        mLog->info("reconnecting in 5 seconds...");
+        mReconnectTimer = sbfTimer_create(sbfMw_getDefaultThread(mMw),
+                                          mQueue,
+                                          gwcFix::onReconnect,
+                                          this,
+                                          5.0);
     }
 }
 
-void
-gwcFix::getTime (cdrDateTime& dt)
+void gwcFix::getTime(cdrDateTime &dt)
 {
     time_t t;
-    struct tm* tmp;
+    struct tm *tmp;
     struct timeval tv;
 
     t = time(NULL);
-    tmp = gmtime (&t);
+    tmp = gmtime(&t);
 
     dt.mYear = 1900 + tmp->tm_year;
     dt.mMonth = 1 + tmp->tm_mon;
@@ -312,98 +302,96 @@ gwcFix::getTime (cdrDateTime& dt)
     dt.mMinute = tmp->tm_min;
     dt.mSecond = tmp->tm_sec;
 
-    if (gettimeofday (&tv, NULL) == 0)
+    if (gettimeofday(&tv, NULL) == 0)
         dt.mNanosecond = (int)tv.tv_usec * 1000;
 }
 
-void
-gwcFix::setHeader (cdr& d)
+void gwcFix::setHeader(cdr &d)
 {
-    d.setString (BeginString, mBeginString);
-    d.setString (SenderCompID, mSenderCompID);
-    d.setString (TargetCompID, mTargetCompID);
-    
+    d.setString(BeginString, mBeginString);
+    d.setString(SenderCompID, mSenderCompID);
+    d.setString(TargetCompID, mTargetCompID);
+
     /*int64_t seqnum;
     if ( !d.getInteger (MsgSeqNum, seqnum) )
     {
          d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
     }*/
 
-    d.setInteger (MsgSeqNum, mSeqnums.mOutbound );
+    d.setInteger(MsgSeqNum, mSeqnums.mOutbound);
 
     cdrDateTime dt;
-    getTime (dt);
-    d.setDateTime (SendingTime, dt);
+    getTime(dt);
+    d.setDateTime(SendingTime, dt);
 }
 
-void 
-gwcFix::handleTcpMsg (cdr& msg)
+void gwcFix::handleTcpMsg(cdr &msg)
 {
-    mLog->debug ("msg in..");
-    mLog->debug ("%s", msg.toString ().c_str ());
+    mLog->debug("msg in..");
+    mLog->debug("%s", msg.toString().c_str());
     /* any message counts as a hb */
     mSeenHb = true;
 
     string msgType;
     int64_t seqnum;
-    msg.getString (MsgType, msgType);
-    msg.getInteger (MsgSeqNum, seqnum);
+    msg.getString(MsgType, msgType);
+    msg.getInteger(MsgSeqNum, seqnum);
 
     if (mState == GWC_CONNECTOR_CONNECTED)
     {
-        if (msgType != FixLogon  && 
+        if (msgType != FixLogon &&
             msgType != FixLogout &&
             msgType != FixResendRequest)
-            return error ("invalid response after logon");
+            return error("invalid response after logon");
 
         if (msgType == FixLogon)
         {
             mResetSeqNumFlag = false;
 
             mState = GWC_CONNECTOR_READY;
-            mHb = sbfTimer_create (sbfMw_getDefaultThread (mMw),
-                                   mQueue,
-                                   gwcFix::onHbTimeout,
-                                   this,
-                                   mHeartBtInt);
+            mHb = sbfTimer_create(sbfMw_getDefaultThread(mMw),
+                                  mQueue,
+                                  gwcFix::onHbTimeout,
+                                  this,
+                                  mHeartBtInt);
 
             bool reset = false;
 
             string resetseqno;
-            if (msg.getString (ResetSeqNumFlag, resetseqno))
+            if (msg.getString(ResetSeqNumFlag, resetseqno))
             {
-                if (!utils_parseBool (resetseqno, reset))
+                if (!utils_parseBool(resetseqno, reset))
                 {
-                    mLog->err ("failed to parse resetseqnumflag to bool");
-                    return error ("invalid logon msg");
+                    mLog->err("failed to parse resetseqnumflag to bool");
+                    return error("invalid logon msg");
                 }
             }
 
             if (reset)
             {
-                lock ();
+                lock();
 
                 mSeqnums.mInbound = seqnum;
 
-                sbfCacheFile_write (mCacheItem, &mSeqnums);
-                sbfCacheFile_flush (mCacheFile);
+                sbfCacheFile_write(mCacheItem, &mSeqnums);
+                sbfCacheFile_flush(mCacheFile);
 
-                unlock ();
+                unlock();
             }
 
             int64_t nextExpectedSeqNum;
-            if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
+            if (msg.getInteger(NextExpectedMsgSeqNum, nextExpectedSeqNum))
             {
                 handleNextExpectedSeqNum(seqnum, msg);
             }
 
             mFirstConnect = false;
-            mSessionsCbs->onLoggedOn (seqnum, msg);
-            loggedOnEvent ();         
+            mSessionsCbs->onLoggedOn(seqnum, msg);
+            loggedOnEvent();
         }
         else if (msgType == FixLogout) /* logon reject */
         {
-            error ("logon rejected");
+            error("logon rejected");
             return;
         }
     }
@@ -411,39 +399,39 @@ gwcFix::handleTcpMsg (cdr& msg)
     // skip seqnum checking on sequence reset
     if (msgType == FixSequenceReset)
     {
-        handleSequenceResetMsg (seqnum, msg);
+        handleSequenceResetMsg(seqnum, msg);
         return;
     }
 
-    lock ();
+    lock();
 
     string possDupFlagStr;
     bool possDupFlag = false;
-    if (msg.getString (PossDupFlag, possDupFlagStr))
+    if (msg.getString(PossDupFlag, possDupFlagStr))
     {
-        mLog->info ("poss dupe flag, %s ", possDupFlagStr.c_str() );
+        mLog->info("poss dupe flag, %s ", possDupFlagStr.c_str());
 
-        if (!utils_parseBool (possDupFlagStr, possDupFlag))
+        if (!utils_parseBool(possDupFlagStr, possDupFlag))
         {
-            mLog->err ("failed to parse poss resend flag as bool");
+            mLog->err("failed to parse poss resend flag as bool");
         }
     }
 
-    if ( !possDupFlag )
+    if (!possDupFlag)
     {
         if (seqnum > mSeqnums.mInbound)
         {
-            mLog->warn ("gap detected, got %ld expected: %ld",
-                        seqnum, mSeqnums.mInbound);
+            mLog->warn("gap detected, got %ld expected: %ld",
+                       seqnum, mSeqnums.mInbound);
 
             cdr resend;
-            resend.setString (MsgType, FixResendRequest);
-            resend.setInteger (BeginSeqNo, mSeqnums.mInbound);
-            resend.setInteger (EndSeqNo, 0);
+            resend.setString(MsgType, FixResendRequest);
+            resend.setInteger(BeginSeqNo, mSeqnums.mInbound);
+            resend.setInteger(EndSeqNo, 0);
 
-            unlock ();
+            unlock();
 
-            sendMsg (resend);
+            sendMsg(resend);
 
             return;
         }
@@ -451,410 +439,408 @@ gwcFix::handleTcpMsg (cdr& msg)
         {
             stringstream err;
             err << "sequence number too low expecting: " << mSeqnums.mInbound;
-            error (err.str ());
+            error(err.str());
 
-            unlock ();
+            unlock();
 
             return;
         }
 
         mSeqnums.mInbound = seqnum + 1;
 
-        sbfCacheFile_write (mCacheItem, &mSeqnums);
-        sbfCacheFile_flush (mCacheFile);
+        sbfCacheFile_write(mCacheItem, &mSeqnums);
+        sbfCacheFile_flush(mCacheFile);
     }
 
-    unlock ();
+    unlock();
 
     if (msgType == FixHeartbeat)
-        mMessageCbs->onAdmin (seqnum, msg);
+        mMessageCbs->onAdmin(seqnum, msg);
     else if (msgType == FixTestRequest)
-        handleTestRequestMsg (seqnum, msg);
+        handleTestRequestMsg(seqnum, msg);
     else if (msgType == FixResendRequest)
-        handleResendRequestMsg (seqnum, msg);
+        handleResendRequestMsg(seqnum, msg);
     else if (msgType == FixReject)
-        handleRejectMsg (seqnum, msg);
+        handleRejectMsg(seqnum, msg);
     else if (msgType == FixLogout)
-        handleLogoutMsg (seqnum, msg);
+        handleLogoutMsg(seqnum, msg);
     else if (msgType == FixExecutionReport)
-        handleExecutionReportMsg (seqnum, msg);
+        handleExecutionReportMsg(seqnum, msg);
     else if (msgType == FixOrderCancelReject)
-        handleOrderCancelRejectMsg (seqnum, msg);
+        handleOrderCancelRejectMsg(seqnum, msg);
     else if (msgType == FixBusinessMessageReject)
-        handleBusinessRejectMsg (seqnum, msg);
-    else if (msgType == FixLogon  &&
+        handleBusinessRejectMsg(seqnum, msg);
+    else if (msgType == FixLogon &&
              msgType == FixLogout &&
              msgType == FixResendRequest)
-        mMessageCbs->onAdmin (seqnum, msg);
+        mMessageCbs->onAdmin(seqnum, msg);
     else
-        mMessageCbs->onMsg (seqnum, msg);
+        mMessageCbs->onMsg(seqnum, msg);
 }
 
-void gwcFix::handleNextExpectedSeqNum( int64_t seqno, cdr& msg)
+void gwcFix::handleNextExpectedSeqNum(int64_t seqno, cdr &msg)
 {
-    mLog->debug ("processing handle nextExpectedSeqNum 34=: %ld", seqno);
+    mLog->debug("processing handle nextExpectedSeqNum 34=: %ld", seqno);
 
     int64_t nextExpectedSeqNum;
-    if ( msg.getInteger (NextExpectedMsgSeqNum, nextExpectedSeqNum ))
+    if (msg.getInteger(NextExpectedMsgSeqNum, nextExpectedSeqNum))
     {
-        mLog->debug ("processing handle nextExpectedSeqNum 789=: %ld", nextExpectedSeqNum );
-        mLog->debug ("processing handle nextExpectedSeqNum our outbound=: %ld", mSeqnums.mOutbound );
+        mLog->debug("processing handle nextExpectedSeqNum 789=: %ld", nextExpectedSeqNum);
+        mLog->debug("processing handle nextExpectedSeqNum our outbound=: %ld", mSeqnums.mOutbound);
 
-        if ( nextExpectedSeqNum > mSeqnums.mOutbound )
+        if ( nextExpectedSeqNum < mSeqnums.mOutbound )
         {
-            mLog->debug ("Sending gap fill in response to next expected seq no" );
+            mLog->debug("Sending gap fill in response to next expected seq no");
 
             cdr resendRequest;
-            resendRequest.setString  (MsgType, FixSequenceReset);
-            resendRequest.setInteger (MsgSeqNum, mSeqnums.mOutbound - 1);
-            resendRequest.setInteger (NewSeqNo, mSeqnums.mOutbound + 1);
-            resendRequest.setString  (GapFillFlag, "Y");
-            sendMsg (resendRequest);
+            resendRequest.setString(MsgType, FixSequenceReset);
+            resendRequest.setInteger(MsgSeqNum, mSeqnums.mOutbound - 1);
+            resendRequest.setInteger(NewSeqNo, mSeqnums.mOutbound + 1);
+            resendRequest.setString(GapFillFlag, "Y");
+            sendMsg(resendRequest);
+        }
+        else if (nextExpectedSeqNum > mSeqnums.mOutbound) 
+        {
+            mLog->debug("handleNextExpectedSeqNum Logoff");
+        }
+        else
+        {
+            mLog->debug("handleNextExpectedSeqNum equal");
         }
     }
 }
 
-void
-gwcFix::handleLogoutMsg (int64_t seqno, cdr& msg)
+void gwcFix::handleLogoutMsg(int64_t seqno, cdr &msg)
 {
-    mMessageCbs->onAdmin (seqno, msg);
+    mMessageCbs->onAdmin(seqno, msg);
 
     // where we in a state to expect a logout
     if (mState != GWC_CONNECTOR_WAITING_LOGOFF)
     {
-        error ("unsolicited logoff from exchnage");
+        error("unsolicited logoff from exchnage");
         return;
     }
-    reset ();
-    mSessionsCbs->onLoggedOff (seqno, msg);
-    loggedOffEvent ();
+    reset();
+    mSessionsCbs->onLoggedOff(seqno, msg);
+    loggedOffEvent();
 }
 
-void
-gwcFix::handleTestRequestMsg (int64_t seqno, cdr& msg)
-{    
-    mMessageCbs->onAdmin (seqno, msg);
+void gwcFix::handleTestRequestMsg(int64_t seqno, cdr &msg)
+{
+    mMessageCbs->onAdmin(seqno, msg);
 
     string testreqid;
-    if (!msg.getString (TestReqID, testreqid))
+    if (!msg.getString(TestReqID, testreqid))
         return;
 
     /* send back heartbeat message */
     cdr tr;
-    tr.setString (MsgType, FixTestRequest);
-    tr.setString (TestReqID, testreqid);
-    sendMsg (tr);
+    tr.setString(MsgType, FixTestRequest);
+    tr.setString(TestReqID, testreqid);
+    sendMsg(tr);
 }
 
-void
-gwcFix::handleResendRequestMsg (int64_t seqno, cdr& msg)
-{    
-    mMessageCbs->onAdmin (seqno, msg);
+void gwcFix::handleResendRequestMsg(int64_t seqno, cdr &msg)
+{
+    mMessageCbs->onAdmin(seqno, msg);
 
     string testreqid;
-    if (!msg.getString (TestReqID, testreqid))
+    if (!msg.getString(TestReqID, testreqid))
         return;
 
     /* we won't replay old messages so lets reset seqno */
     cdr sr;
-    sr.setString (MsgType, FixSequenceReset);
-    sr.setInteger (NewSeqNo, mSeqnums.mOutbound + 1);
-    sendMsg (sr);
+    sr.setString(MsgType, FixSequenceReset);
+    sr.setInteger(NewSeqNo, mSeqnums.mOutbound + 1);
+    sendMsg(sr);
 }
 
-void
-gwcFix::handleSequenceResetMsg (int64_t seqno, cdr& msg)
-{    
-    mMessageCbs->onAdmin (seqno, msg);
+void gwcFix::handleSequenceResetMsg(int64_t seqno, cdr &msg)
+{
+    mMessageCbs->onAdmin(seqno, msg);
 
     int64_t newseqno;
-    if (!msg.getInteger (NewSeqNo, newseqno))
+    if (!msg.getInteger(NewSeqNo, newseqno))
         return;
 
-    mLog->debug ("sequence reset: %ld", newseqno);
+    mLog->debug("sequence reset: %ld", newseqno);
 
-    lock ();
+    lock();
 
     mSeqnums.mInbound = newseqno;
-    sbfCacheFile_write (mCacheItem, &mSeqnums);
-    sbfCacheFile_flush (mCacheFile);
+    sbfCacheFile_write(mCacheItem, &mSeqnums);
+    sbfCacheFile_flush(mCacheFile);
 
-    unlock ();
+    unlock();
 }
 
-void
-gwcFix::handleRejectMsg (int64_t seqno, cdr& msg)
-{    
-    mMessageCbs->onAdmin (seqno, msg);
+void gwcFix::handleRejectMsg(int64_t seqno, cdr &msg)
+{
+    mMessageCbs->onAdmin(seqno, msg);
 }
 
-void
-gwcFix::handleBusinessRejectMsg (int64_t seqno, cdr& msg)
-{    
-    mMessageCbs->onAdmin (seqno, msg);
+void gwcFix::handleBusinessRejectMsg(int64_t seqno, cdr &msg)
+{
+    mMessageCbs->onAdmin(seqno, msg);
 }
 
-void
-gwcFix::handleExecutionReportMsg (int64_t seqno, cdr& msg)
+void gwcFix::handleExecutionReportMsg(int64_t seqno, cdr &msg)
 {
     string exectranstype;
     string exectype;
 
-    if (msg.getString (ExecTransType, exectranstype))
+    if (msg.getString(ExecTransType, exectranstype))
     {
         if (exectranstype != "0")
         {
             // restatement
-            mMessageCbs->onMsg (seqno, msg);
+            mMessageCbs->onMsg(seqno, msg);
             return;
         }
     }
 
-    if (!msg.getString (ExecType, exectype))
+    if (!msg.getString(ExecType, exectype))
     {
         // invalid execution report received
-        mMessageCbs->onMsg (seqno, msg);
+        mMessageCbs->onMsg(seqno, msg);
         return;
-    }   
+    }
 
     if (exectype == "0")
-        mMessageCbs->onOrderAck (seqno, msg);
+        mMessageCbs->onOrderAck(seqno, msg);
     else if (exectype == "1" || exectype == "2")
-        mMessageCbs->onOrderFill (seqno, msg);
+        mMessageCbs->onOrderFill(seqno, msg);
     else if (exectype == "3" || exectype == "4")
-        mMessageCbs->onOrderDone (seqno, msg);
+        mMessageCbs->onOrderDone(seqno, msg);
     else if (exectype == "5")
-        mMessageCbs->onModifyAck (seqno, msg);
+        mMessageCbs->onModifyAck(seqno, msg);
     else if (exectype == "8")
-        mMessageCbs->onOrderRejected (seqno, msg);
+        mMessageCbs->onOrderRejected(seqno, msg);
     else
-        mMessageCbs->onMsg (seqno, msg);
+        mMessageCbs->onMsg(seqno, msg);
 }
 
-void
-gwcFix::handleOrderCancelRejectMsg (int64_t seqno, cdr& msg)
+void gwcFix::handleOrderCancelRejectMsg(int64_t seqno, cdr &msg)
 {
     string cxlresp;
-    if (!msg.getString (CxlRejResponseTo, cxlresp))
+    if (!msg.getString(CxlRejResponseTo, cxlresp))
     {
         // invalid cancel reject msg
-        mMessageCbs->onMsg (seqno, msg);
+        mMessageCbs->onMsg(seqno, msg);
         return;
     }
 
     if (cxlresp == "1")
-        mMessageCbs->onCancelRejected (seqno, msg);
+        mMessageCbs->onCancelRejected(seqno, msg);
     else if (cxlresp == "2")
-        mMessageCbs->onModifyRejected (seqno, msg);
+        mMessageCbs->onModifyRejected(seqno, msg);
 }
 
-bool 
-gwcFix::init (gwcSessionCallbacks* sessionCbs, 
-                gwcMessageCallbacks* messageCbs,  
-                const neueda::properties& props)
+bool gwcFix::init(gwcSessionCallbacks *sessionCbs,
+                  gwcMessageCallbacks *messageCbs,
+                  const neueda::properties &props)
 {
     mSessionsCbs = sessionCbs;
     mMessageCbs = messageCbs;
 
     string v;
-    if (!props.get ("host", v))
+    if (!props.get("host", v))
     {
-        mLog->err ("missing property host");
+        mLog->err("missing property host");
         return false;
     }
-    if (sbfInterface_parseAddress (v.c_str(), &mGwHost.sin) != 0)
+    if (sbfInterface_parseAddress(v.c_str(), &mGwHost.sin) != 0)
     {
-        mLog->err ("failed to parse host [%s]", v.c_str());
+        mLog->err("failed to parse host [%s]", v.c_str());
         return false;
     }
 
-    props.get ("begin_string", mBeginString);
+    props.get("begin_string", mBeginString);
 
-    if (!props.get ("sender_comp_id", mSenderCompID))
+    if (!props.get("sender_comp_id", mSenderCompID))
     {
-        mLog->err ("missing property sender_comp_id");
+        mLog->err("missing property sender_comp_id");
         return false;
     }
 
     bool valid;
-    if (props.get ("heartbeat_interval", mHeartBtInt, valid))
+    if (props.get("heartbeat_interval", mHeartBtInt, valid))
     {
         if (!valid)
         {
-            mLog->err ("failed to parse heartbeat_interval to integer");
+            mLog->err("failed to parse heartbeat_interval to integer");
             return false;
         }
     }
 
-    if (props.get ("reset_sequence_number", mResetSeqNumFlag, valid))
+    if (props.get("reset_sequence_number", mResetSeqNumFlag, valid))
     {
         if (!valid)
         {
-            mLog->err ("failed to parse reset_sequence_number to bool");
+            mLog->err("failed to parse reset_sequence_number to bool");
             return false;
         }
     }
 
-    if (props.get ("reset_on_logon", mResetOnLogon, valid))
+    if (props.get("reset_on_logon", mResetOnLogon, valid))
     {
         if (!valid)
         {
-            mLog->err ("failed to parse reset_on_logon to bool");
+            mLog->err("failed to parse reset_on_logon to bool");
             return false;
         }
     }
 
-    if (props.get ("set_next_expected_seqnum", mSetNextExpSeqNum, valid))
+    if (props.get("set_next_expected_seqnum", mSetNextExpSeqNum, valid))
     {
         if (!valid)
         {
-            mLog->err ("failed to parse set_next_expected_seqnum to bool");
+            mLog->err("failed to parse set_next_expected_seqnum to bool");
             return false;
         }
     }
 
-    if (!props.get ("target_comp_id", mTargetCompID))
+    if (!props.get("target_comp_id", mTargetCompID))
     {
-        mLog->err ("missing property target_comp_id");
+        mLog->err("missing property target_comp_id");
         return false;
     }
 
-    if (!props.get ("data_dictionary", mDataDictionary))
+    if (!props.get("data_dictionary", mDataDictionary))
     {
-        mLog->err ("missing property data_dictionary");
+        mLog->err("missing property data_dictionary");
         return false;
     }
 
     string err;
-    if (!mCodec.loadDataDictionary (mDataDictionary.c_str (), err))
+    if (!mCodec.loadDataDictionary(mDataDictionary.c_str(), err))
     {
-        mLog->err ("failed to load data_dictionary %s", err.c_str ());
+        mLog->err("failed to load data_dictionary %s", err.c_str());
         return false;
-    }   
+    }
 
     string cacheFileName;
-    props.get ("seqno_cache", "fix.seqno.cache", cacheFileName);
-    
+    props.get("seqno_cache", "fix.seqno.cache", cacheFileName);
+
     int created;
-    mCacheFile = sbfCacheFile_open (cacheFileName.c_str (),
-                                    sizeof (gwcFixSeqnums),
-                                    0,
-                                    &created,
-                                    cacheFileItemCb,
-                                    this);
+    mCacheFile = sbfCacheFile_open(cacheFileName.c_str(),
+                                   sizeof(gwcFixSeqnums),
+                                   0,
+                                   &created,
+                                   cacheFileItemCb,
+                                   this);
     if (mCacheFile == NULL)
     {
-        mLog->err ("failed to create fix seqno cache file");
+        mLog->err("failed to create fix seqno cache file");
         return false;
     }
 
     if (created)
     {
-        mLog->info ("created seqno cachefile %s", cacheFileName.c_str ());
-        mCacheItem = sbfCacheFile_add (mCacheFile, &mSeqnums);
-        sbfCacheFile_flush (mCacheFile);
+        mLog->info("created seqno cachefile %s", cacheFileName.c_str());
+        mCacheItem = sbfCacheFile_add(mCacheFile, &mSeqnums);
+        sbfCacheFile_flush(mCacheFile);
     }
 
     string enableRaw;
-    props.get ("enable_raw_messages", "false", enableRaw);
-    if (!utils_parseBool (enableRaw, mRawEnabled))
+    props.get("enable_raw_messages", "false", enableRaw);
+    if (!utils_parseBool(enableRaw, mRawEnabled))
     {
-        mLog->err ("failed to parse enable_raw_messages as bool");
+        mLog->err("failed to parse enable_raw_messages as bool");
         return false;
     }
 
-    sbfKeyValue kv = sbfKeyValue_create ();
-    mMw = sbfMw_create (mSbfLog, kv);
-    sbfKeyValue_destroy (kv);
+    sbfKeyValue kv = sbfKeyValue_create();
+    mMw = sbfMw_create(mSbfLog, kv);
+    sbfKeyValue_destroy(kv);
     if (mMw == NULL)
     {
-        mLog->err ("failed to create mw");
+        mLog->err("failed to create mw");
         return false;
     }
 
     // could add a prop to make queue spin for max performance
-    mQueue = sbfQueue_create (mMw, "default");
+    mQueue = sbfQueue_create(mMw, "default");
     if (mQueue == NULL)
     {
-        mLog->err ("failed to create queue");
+        mLog->err("failed to create queue");
         return false;
     }
 
-    // start to dispatch 
-    if (sbfThread_create (&mThread, gwcFix::dispatchCb, this) != 0)
+    // start to dispatch
+    if (sbfThread_create(&mThread, gwcFix::dispatchCb, this) != 0)
     {
-        mLog->err ("failed to start dispatch queue");
+        mLog->err("failed to start dispatch queue");
         return false;
     }
 
     int fileCount = 0;
     int maxSize = 0;
     string messagesIn;
-    if (props.get ("messages_in", messagesIn))
+    if (props.get("messages_in", messagesIn))
     {
-        mLog->info ("inbound messages file: %s", messagesIn.c_str ());
+        mLog->info("inbound messages file: %s", messagesIn.c_str());
 
-
-        if (props.get ("messages_in_count", fileCount, valid))
+        if (props.get("messages_in_count", fileCount, valid))
         {
             if (!valid)
             {
-                mLog->err ("failed to parse messages_in_count");
+                mLog->err("failed to parse messages_in_count");
                 return false;
             }
         }
 
-        if (props.get ("messages_in_maxsize", maxSize, valid))
+        if (props.get("messages_in_maxsize", maxSize, valid))
         {
             if (!valid)
             {
-                mLog->err ("failed to parse messages_in_maxsize");
+                mLog->err("failed to parse messages_in_maxsize");
                 return false;
             }
         }
 
-        mMsgInWriter = new msgWriter (messagesIn, maxSize, fileCount);
-        if (!mMsgInWriter->setup (err))
+        mMsgInWriter = new msgWriter(messagesIn, maxSize, fileCount);
+        if (!mMsgInWriter->setup(err))
         {
-            mLog->err ("%s", err.c_str ());
+            mLog->err("%s", err.c_str());
             return false;
         }
     }
 
     string messagesOut;
-    if (props.get ("messages_out", messagesOut))
+    if (props.get("messages_out", messagesOut))
     {
         fileCount = 0;
         maxSize = 0;
-        mLog->info ("outbound messages file: %s", messagesOut.c_str ());
+        mLog->info("outbound messages file: %s", messagesOut.c_str());
 
-        if (props.get ("messages_out_count", fileCount, valid))
+        if (props.get("messages_out_count", fileCount, valid))
         {
             if (!valid)
             {
-                mLog->err ("failed to parse messages_out_count");
+                mLog->err("failed to parse messages_out_count");
                 return false;
             }
         }
 
-        if (props.get ("messages_out_maxsize", maxSize, valid))
+        if (props.get("messages_out_maxsize", maxSize, valid))
         {
             if (!valid)
             {
-                mLog->err ("failed to parse messages_out_maxsize");
+                mLog->err("failed to parse messages_out_maxsize");
                 return false;
             }
         }
 
         // same messages file, share writer
-        if (!messagesIn.empty () && messagesIn == messagesOut)
+        if (!messagesIn.empty() && messagesIn == messagesOut)
             mMsgOutWriter = mMsgInWriter;
         else
         {
-            mMsgOutWriter = new msgWriter (messagesOut, maxSize, fileCount);
-            if (!mMsgOutWriter->setup (err))
+            mMsgOutWriter = new msgWriter(messagesOut, maxSize, fileCount);
+            if (!mMsgOutWriter->setup(err))
             {
-                mLog->err ("%s", err.c_str ());
+                mLog->err("%s", err.c_str());
                 return false;
             }
         }
@@ -864,19 +850,18 @@ gwcFix::init (gwcSessionCallbacks* sessionCbs,
     return true;
 }
 
-bool 
-gwcFix::start (bool reset)
+bool gwcFix::start(bool reset)
 {
-    mLog->debug ("gwcFIX::start start called");
+    mLog->debug("gwcFIX::start start called");
 
     if (mTcpConnection != NULL)
         delete mTcpConnection;
 
     if (reset || mResetSeqNumFlag)
     {
-        mLog->debug ("gwcFIX::start resetting sequence numbers");
+        mLog->debug("gwcFIX::start resetting sequence numbers");
 
-        lock ();
+        lock();
 
         // set ResetSeqNumFlag true if reset has been passed
         // at call to start
@@ -886,66 +871,64 @@ gwcFix::start (bool reset)
         mSeqnums.mInbound = 1;
         mSeqnums.mOutbound = 1;
 
-        sbfCacheFile_write (mCacheItem, &mSeqnums);
-        sbfCacheFile_flush (mCacheFile);
+        sbfCacheFile_write(mCacheItem, &mSeqnums);
+        sbfCacheFile_flush(mCacheFile);
 
-        unlock ();
+        unlock();
     }
 
-    mLog->debug ("gwcFIX::start creating new tcp connection");
+    mLog->debug("gwcFIX::start creating new tcp connection");
 
-    mTcpConnection = new SbfTcpConnection (mSbfLog,
-                                           sbfMw_getDefaultThread (mMw),
-                                           mQueue,
-                                           &mGwHost,
-                                           false,
-                                           true, // disable-nagles
-                                           &mTcpConnectionDelegate);
-    if (!mTcpConnection->connect ())
+    mTcpConnection = new SbfTcpConnection(mSbfLog,
+                                          sbfMw_getDefaultThread(mMw),
+                                          mQueue,
+                                          &mGwHost,
+                                          false,
+                                          true, // disable-nagles
+                                          &mTcpConnectionDelegate);
+    if (!mTcpConnection->connect())
     {
-        mLog->err ("failed to create connection to gateway response server");
+        mLog->err("failed to create connection to gateway response server");
         return false;
     }
 
-    mLog->debug ("gwcFIX::start created new tcp connection");
+    mLog->debug("gwcFIX::start created new tcp connection");
 
     return true;
 }
 
-bool 
-gwcFix::stop ()
+bool gwcFix::stop()
 {
-    lock ();
+    lock();
     if (mState != GWC_CONNECTOR_READY) // not logged in
     {
-        reset ();
+        reset();
         cdr logoffResponse;
-        mSessionsCbs->onLoggedOff (0, logoffResponse);
-        loggedOffEvent ();
-        unlock ();
+        mSessionsCbs->onLoggedOff(0, logoffResponse);
+        loggedOffEvent();
+        unlock();
         return true;
     }
 
-    unlock ();
+    unlock();
 
     cdr logoff;
-    logoff.setString (MsgType, FixLogout);
+    logoff.setString(MsgType, FixLogout);
 
-    if (!sendMsg (logoff))
+    if (!sendMsg(logoff))
         return false;
 
     mState = GWC_CONNECTOR_WAITING_LOGOFF;
     return true;
 }
 
-bool
-gwcFix::mapOrderFields (gwcOrder& order)
+bool gwcFix::mapOrderFields(gwcOrder &order)
 {
     if (order.mPriceSet)
-        order.setInteger (Price, order.mPrice);
+        order.setInteger(Price, order.mPrice);
 
     if (order.mQtySet)
-        order.setInteger (OrderQty, order.mQty);
+        order.setInteger(OrderQty, order.mQty);
 
     if (order.mOrderTypeSet)
     {
@@ -987,8 +970,8 @@ gwcFix::mapOrderFields (gwcOrder& order)
             break;
         }
 
-        if(!ordType.empty())
-            order.setString (OrdType, "%c", *ordType.c_str());
+        if (!ordType.empty())
+            order.setString(OrdType, "%c", *ordType.c_str());
     }
 
     if (order.mSideSet)
@@ -1035,7 +1018,7 @@ gwcFix::mapOrderFields (gwcOrder& order)
             break;
         }
 
-        if(!side.empty())
+        if (!side.empty())
             order.setString(Side, "%c", *side.c_str());
     }
 
@@ -1065,153 +1048,143 @@ gwcFix::mapOrderFields (gwcOrder& order)
             break;
         }
 
-        if(!tif.empty()) 
-            order.setString (TimeInForce, "%c", *tif.c_str());
+        if (!tif.empty())
+            order.setString(TimeInForce, "%c", *tif.c_str());
     }
 
     return true;
 }
 
-bool
-gwcFix::traderLogon (const cdr* msg)
+bool gwcFix::traderLogon(const cdr *msg)
 {
     // TODO traderLogon needs looked at
     return true;
 }
 
-bool
-gwcFix::sendOrder (gwcOrder& order)
+bool gwcFix::sendOrder(gwcOrder &order)
 {
-    if (!mapOrderFields (order))
+    if (!mapOrderFields(order))
         return false;
 
-    return sendOrder ((cdr&)order);
+    return sendOrder((cdr &)order);
 }
 
-bool 
-gwcFix::sendOrder (cdr& order)
+bool gwcFix::sendOrder(cdr &order)
 {
-    order.setString (MsgType, FixNewOrderSingle);
+    order.setString(MsgType, FixNewOrderSingle);
 
-    if (!order.contains (TransactTime))
+    if (!order.contains(TransactTime))
     {
         cdrDateTime dt;
-        getTime (dt);
-        order.setDateTime (TransactTime, dt);
+        getTime(dt);
+        order.setDateTime(TransactTime, dt);
     }
 
-    return sendMsg (order);
+    return sendMsg(order);
 }
 
-bool
-gwcFix::sendCancel (gwcOrder& cancel)
+bool gwcFix::sendCancel(gwcOrder &cancel)
 {
-    if (!mapOrderFields (cancel))
+    if (!mapOrderFields(cancel))
         return false;
 
-    return sendCancel ((cdr&)cancel);
+    return sendCancel((cdr &)cancel);
 }
 
-bool 
-gwcFix::sendCancel (cdr& cancel)
+bool gwcFix::sendCancel(cdr &cancel)
 {
-    cancel.setString (MsgType, FixOrderCancelRequest);
+    cancel.setString(MsgType, FixOrderCancelRequest);
 
-    if (!cancel.contains (TransactTime))
+    if (!cancel.contains(TransactTime))
     {
         cdrDateTime dt;
-        getTime (dt);
-        cancel.setDateTime (TransactTime, dt);
+        getTime(dt);
+        cancel.setDateTime(TransactTime, dt);
     }
 
-    return sendMsg (cancel);
+    return sendMsg(cancel);
 }
 
-bool
-gwcFix::sendModify (gwcOrder& modify)
+bool gwcFix::sendModify(gwcOrder &modify)
 {
-    if (!mapOrderFields (modify))
+    if (!mapOrderFields(modify))
         return false;
 
-    return sendModify ((cdr&)modify);
+    return sendModify((cdr &)modify);
 }
 
-bool 
-gwcFix::sendModify (cdr& modify)
+bool gwcFix::sendModify(cdr &modify)
 {
-    modify.setString (MsgType, FixOrderCancelReplaceRequest);
+    modify.setString(MsgType, FixOrderCancelReplaceRequest);
 
-    if (!modify.contains (TransactTime))
+    if (!modify.contains(TransactTime))
     {
         cdrDateTime dt;
-        getTime (dt);
-        modify.setDateTime (TransactTime, dt);
+        getTime(dt);
+        modify.setDateTime(TransactTime, dt);
     }
 
-    return sendMsg (modify);
+    return sendMsg(modify);
 }
 
-bool 
-gwcFix::sendMsg (cdr& msg)
+bool gwcFix::sendMsg(cdr &msg)
 {
     char space[1024];
     size_t used = 0;
 
-
-    lock ();
+    lock();
     if (mState != GWC_CONNECTOR_READY)
     {
-        mLog->warn ("gwc not ready to send messages");
-        unlock ();
+        mLog->warn("gwc not ready to send messages");
+        unlock();
         return false;
     }
 
-    setHeader (msg);
+    setHeader(msg);
 
-    if (mCodec.encode (msg, space, sizeof space, used) != GW_CODEC_SUCCESS)
+    if (mCodec.encode(msg, space, sizeof space, used) != GW_CODEC_SUCCESS)
     {
-        mLog->err ("failed to construct message [%s]",
-                   mCodec.getLastError ().c_str ());
+        mLog->err("failed to construct message [%s]",
+                  mCodec.getLastError().c_str());
 
-        unlock ();
+        unlock();
         return false;
     }
 
-    mLog->debug ("msg out..");
-    mLog->debug ("%s", msg.toString ().c_str ());
+    mLog->debug("msg out..");
+    mLog->debug("%s", msg.toString().c_str());
 
-    mTcpConnection->send (space, used);
+    mTcpConnection->send(space, used);
     if (mMsgOutWriter)
-        mMsgOutWriter->write ((void*)space, used);
+        mMsgOutWriter->write((void *)space, used);
 
     mSeqnums.mOutbound++;
-    sbfCacheFile_write (mCacheItem, &mSeqnums);
-    sbfCacheFile_flush (mCacheFile);
+    sbfCacheFile_write(mCacheItem, &mSeqnums);
+    sbfCacheFile_flush(mCacheFile);
 
-    unlock ();
+    unlock();
     return true;
 }
 
-bool
-gwcFix::sendRaw (void* data, size_t len)
+bool gwcFix::sendRaw(void *data, size_t len)
 {
     if (!mRawEnabled)
     {
-        mLog->warn ("raw send interface not enabled");
+        mLog->warn("raw send interface not enabled");
         return false;
-    }    
+    }
 
-    lock ();
+    lock();
 
     /* XXX need to setup seqnum */
     if (mState != GWC_CONNECTOR_READY)
     {
-        mLog->warn ("gwc not ready to send messages");
-        unlock ();
+        mLog->warn("gwc not ready to send messages");
+        unlock();
         return false;
     }
- 
-    mTcpConnection->send (data, len);
-    unlock ();
+
+    mTcpConnection->send(data, len);
+    unlock();
     return true;
 }
