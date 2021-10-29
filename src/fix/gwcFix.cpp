@@ -574,6 +574,40 @@ void gwcFix::handleSequenceResetMsg(int64_t seqno, cdr &msg)
     unlock();
 }
 
+bool gwcFix::setSequenceNumbers( int64_t inbound, int64_t outbound)
+{
+    mLog->debug("setSequenceNumbers: 1");
+
+    lock();
+
+    mLog->debug("setSequenceNumbers: 2");
+
+    mSeqnums.mInbound = inbound;
+    mSeqnums.mOutbound = outbound;
+    
+    mLog->debug("setSequenceNumbers: 3");
+
+    if ( !mCacheItem )
+    {
+        mLog->debug("setSequenceNumbers: err");
+        return false;
+    }
+
+    sbfCacheFile_write(mCacheItem, &mSeqnums);
+
+    mLog->debug("setSequenceNumbers: 4");
+
+    sbfCacheFile_flush(mCacheFile);
+
+    mLog->debug("setSequenceNumbers: 5");
+
+    unlock();
+
+    mLog->debug("setSequenceNumbers exiting:");
+
+    return true;
+}
+
 void gwcFix::handleRejectMsg(int64_t seqno, cdr &msg)
 {
     mMessageCbs->onAdmin(seqno, msg);
@@ -742,6 +776,9 @@ bool gwcFix::init(gwcSessionCallbacks *sessionCbs,
         sbfCacheFile_flush(mCacheFile);
     }
 
+    mLog->debug("Loaded Inbound Sequence Number from cache: %ld", mSeqnums.mInbound);
+    mLog->debug("Loaded Outbound Sequence Number from cache: %ld", mSeqnums.mOutbound);
+
     string enableRaw;
     props.get("enable_raw_messages", "false", enableRaw);
     if (!utils_parseBool(enableRaw, mRawEnabled))
@@ -899,9 +936,13 @@ bool gwcFix::start(bool reset)
 
 bool gwcFix::stop()
 {
+    mLog->debug("gwcFIX::stop called");
+
     lock();
     if (mState != GWC_CONNECTOR_READY) // not logged in
     {
+        mLog->debug("gwcFIX::stop called mState != GWC_CONNECTOR_READY");
+
         reset();
         cdr logoffResponse;
         mSessionsCbs->onLoggedOff(0, logoffResponse);
@@ -909,14 +950,18 @@ bool gwcFix::stop()
         unlock();
         return true;
     }
-
     unlock();
+
+    mLog->debug("gwcFIX::stop called sending logoff");
 
     cdr logoff;
     logoff.setString(MsgType, FixLogout);
 
     if (!sendMsg(logoff))
+    {
+        mLog->debug("gwcFIX::stop called sending logoff");
         return false;
+    }
 
     mState = GWC_CONNECTOR_WAITING_LOGOFF;
     return true;
@@ -1152,7 +1197,8 @@ bool gwcFix::sendMsg(cdr &msg)
     }
 
     mLog->debug("msg out..");
-    mLog->debug("%s", msg.toString().c_str());
+    mLog->debug("msg %s", msg.toString().c_str());
+    mLog->debug("space %s", space);
 
     mTcpConnection->send(space, used);
     if (mMsgOutWriter)

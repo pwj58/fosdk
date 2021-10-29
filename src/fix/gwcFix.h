@@ -97,6 +97,8 @@ public:
     virtual bool sendMsg (cdr& msg);
     virtual bool sendRaw (void* data, size_t len);
 
+    virtual bool setSequenceNumbers( int64_t inbound, int64_t outbound);
+
 protected:
     SbfTcpConnection*           mTcpConnection;
     gwcFixTcpConnectionDelegate mTcpConnectionDelegate;
