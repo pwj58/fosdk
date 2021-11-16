@@ -1,6 +1,8 @@
 set (INSTALL_HEADERS
   gwcCommon.h
   gwcConnector.h
+  fix/gwcFix.h
+  fix/msgWriter.h
   )
 
 set (SOURCES
