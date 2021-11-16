@@ -438,7 +438,7 @@ void gwcFix::handleTcpMsg(cdr &msg)
         else if (seqnum < mSeqnums.mInbound)
         {
             stringstream err;
-            err << "sequence number too low expecting: " << mSeqnums.mInbound;
+            err << "sequence number too low expecting: " << mSeqnums.mInbound << " got: " << seqnum;
             error(err.str());
 
             unlock();
@@ -576,17 +576,11 @@ void gwcFix::handleSequenceResetMsg(int64_t seqno, cdr &msg)
 
 bool gwcFix::setSequenceNumbers( int64_t inbound, int64_t outbound)
 {
-    mLog->debug("setSequenceNumbers: 1");
-
     lock();
-
-    mLog->debug("setSequenceNumbers: 2");
 
     mSeqnums.mInbound = inbound;
     mSeqnums.mOutbound = outbound;
     
-    mLog->debug("setSequenceNumbers: 3");
-
     if ( !mCacheItem )
     {
         mLog->debug("setSequenceNumbers: err");
@@ -595,15 +589,9 @@ bool gwcFix::setSequenceNumbers( int64_t inbound, int64_t outbound)
 
     sbfCacheFile_write(mCacheItem, &mSeqnums);
 
-    mLog->debug("setSequenceNumbers: 4");
-
     sbfCacheFile_flush(mCacheFile);
 
-    mLog->debug("setSequenceNumbers: 5");
-
     unlock();
-
-    mLog->debug("setSequenceNumbers exiting:");
 
     return true;
 }
@@ -885,6 +873,11 @@ bool gwcFix::init(gwcSessionCallbacks *sessionCbs,
 
     mDispatching = true;
     return true;
+}
+
+bool gwcFix::join()
+{
+    sbfThread_join(mThread);
 }
 
 bool gwcFix::start(bool reset)

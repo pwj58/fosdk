@@ -99,6 +99,8 @@ public:
 
     virtual bool setSequenceNumbers( int64_t inbound, int64_t outbound);
 
+    virtual bool join();
+
 protected:
     SbfTcpConnection*           mTcpConnection;
     gwcFixTcpConnectionDelegate mTcpConnectionDelegate;
